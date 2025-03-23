@@ -1,383 +1,439 @@
 <html>
-    <head>
-        <style>
-            div {
-                border:1px solid;
-                align-content: center;
-            }
-            div.title {
-                font-size: 25px;
-                text-align: center;
-            }
-            div.title>span {
-                color: red;
-            }
-            div>div.global-controls{
-                display: inline-block;
-            }
-            .play_speed {
-                display: inline-block;
-                padding: 5px;
-                text-align: center;
-            }
-            .controls {
-                display: inline-block;
-                padding: 5px;
-                text-align: center;
-            }
-            .showMap > iframe {
-                width: 600px;
-                height: 450px;
-            }
-            video {
-                width: 600px;
-                height: 450px;
-            }
-            table tr td {
-                border:1px solid;
-                text-align: center;
-            }
-            textarea {
-                width: 100%;
-            }
-            div.readme {
-                padding: 5px;
-            }
-            code {
-                background:lightgrey
-            }
-        </style>
-    </head>
-    <body>
-        <div>
-            <div>
-                <strong>Select TeslaCam Directory</strong>(Must be in same directory as Index.html):<br/> 
-                <input type="file" id="fileBrowser" accept="video/mp4" webkitdirectory multiple/>
-            </div>
-            <div>   
-                Browse Loaded Clips: <select class="date-select"><option>- - - - - -</option></select>
-            </div>
-        </div>
-        
-        <div class="global-controls">
-            <div class="play_speed">
-                <span>Play Speed</span><br/>
-                <button onclick="playRate(0.5)">0.5x</button>
-                <button onclick="playRate(1)">1x</button>
-                <button onclick="playRate(2)">2x</button>
-                <button onclick="playRate(3)">3x</button>
-                <button onclick="playRate(8)">8x</button>
-            </div>
-            <div class="controls">
-                <span>General Controls</span><br/>
-                <button class="previous">&lt;&lt;PREV&lt;&lt;</button>
-                <button class="skip" onclick="skipTo(-5)">-5</button>
-                <button class="skip" onclick="skipTo(-3)">-3</button>
-                <button onclick="playPause()">PLAY/PAUSE</button>
-                <button class="skip" onclick="skipTo(3)">3</button>
-                <button class="skip" onclick="skipTo(5)">5</button>
-                <button class="next">&gt;&gt;NEXT&gt;&gt;</button>
-                <input checked type="checkbox" name="autoplay"/>Autoplay
-            </div>
-        </div>
-		<div>
-            <div class="title">
-                <span>No Videos Loaded</span>
-            </div>
-            <table>
-                <tr>
-                    <td><video class="left_repeater"  src="" controls controlsList="play pause"></video></td>
-                    <td><video class="front"          src="" controls controlsList="play pause"></video></td>
-                    <td><video class="right_repeater" src="" controls controlsList="play pause"></video></td>
-                </tr>
-                
-                <tr>
-                    <td colspan="1" class="showMap" id="showMap"></td>
-                    <td colspan="1"><video class="back" src="" controls controlsList="play pause"></video></td>
-                    <td colspan="1"></td>
-                </tr>
-            </table> 
-        </div>
-        <div class="readme">
-            <h2>README</h2>
-            <hr/>
-            <strong>Directory Placement</strong><br/>
-            This <code>index.html</code> file <strong>must</strong> be at the same level as the <code>TeslaCam</code> folder which can be placed directly on the root of the USB drive.<br/>
-            <strong>Example:</strong><br/>
-            <code>
-            Root Folder<br/>
-            |- index.html<br/>
-            |- TeslaCam(USB Drive Top Level Folder)<br/>
-            &nbsp;&nbsp;&nbsp;|- Saved Clips<br/>
-            &nbsp;&nbsp;&nbsp;|- Sentry Videos<br/>
-            &nbsp;&nbsp;&nbsp;|- ...<br/>
-            </code><br/>
-        </div>
-	</body>
-
-<script>
-	var carouselIndex;
-	var selectItemIndex;
-	var files;
-	
-    var playbackRate = 1
-	var playPauseFlag = true;
-	
-    var carousel = []
-    var carouselEventFiles = []
-    var title = document.querySelector("div.title")
-    var backVideo = document.querySelector("video.back")
-    var frontVideo = document.querySelector("video.front")
-    var leftVideo = document.querySelector("video.left_repeater")
-    var rightVideo = document.querySelector("video.right_repeater")
-    var next = document.querySelector("button.next")
-    var previous = document.querySelector("button.previous")
-    var setVideos = document.querySelector("button.setVideos")
-
-    var dateSelector = document.querySelector("select.date-select")
-
-    var skip = document.querySelector("button.skip")
-
-
-    class TeslaCamFile {
-        separator = "/" //default separator(necessary? not sure)
-        clipType = "SentryClip" //Recorded/SentryClip...
-        triggerDate = "" // folder name doubles as the date the video clip was triggered
-        clipDate = "" // transformed clip name
-        clipName = "" // the clip name
-        file = "" // webkit file incase we need other data
-
-        constructor(file){
-            this.clipName = file.name
-            this.clipDate = Date.parse(this.parseToDate(file.name))
-            this.getDirectories(file)
-
-            //just in case we need it for the future
-            this.file = file
-        }
-
-        getDirectories(file){
-            this.separator = file.webkitRelativePath.replace(file.name, "").substr(-1)
-            var directoryParts = file.webkitRelativePath.split(this.separator)
-            this.clipType = directoryParts[1]
-            this.triggerDate = directoryParts[2]
-        }
-
-        //format to ISO(sorta) - no TZ so defaults to local
-        parseToDate(filename){
-            let nameArry = filename.split("_");
-            let dateArry = nameArry[0].split("-");
-            let hourArry = nameArry[1].split("-");
-            return dateArry[0]+"-"+dateArry[1]+"-"+dateArry[2]+"T"+hourArry[0]+":"+hourArry[1]+":"+hourArry[2]; 
-        }
-
-        build(){
-            var filePath = "TeslaCam" + this.separator + this.clipType
-            if(this.clipType != "RecentClips"){
-                filePath += this.separator + this.triggerDate
-            }
-
-            return filePath + this.separator + this.clipName.replace(/-back.mp4$/gm,'')
-        }
-
-        buildEvent(){
-            var filePath = "TeslaCam" + this.separator + this.clipType
-            if(this.clipType != "RecentClips"){
-                filePath += this.separator + this.triggerDate
-            }
-
-            return filePath + this.separator
-        }
-    }
-	
-    
-	//The following code uses webkitdirectory to get all the videos from a directory
-    document.querySelector("input[type=file][id=fileBrowser]").addEventListener("change", function(e){
-        var files = e.target.files
-        tcFiles = []
-        var eventFiles = {}
-        //get "back" files to sort from webkitRelativePath
-        for (let i=0; i<files.length; i++) {
-            var file = files[i]
-            if(file.webkitRelativePath.endsWith("-back.mp4")){
-                var tcFile = new TeslaCamFile(file)
-                tcFiles.push(tcFile)
-            }
-            if(file.webkitRelativePath.endsWith("event.json")){
-                eventFiles[file.webkitRelativePath] = file
-            }
-        }
-        
-        //Sort the files in ascending date
-        tcFiles.sort(function(a,b){
-            var firstDate = a.clipDate
-            var secondDate = b.clipDate
-            return firstDate - secondDate
-        })
-
-        // Create dropdown for clips
-        tmpDir = [] //track dir's added
-        // if(document.querySelector("select.date-select") != undefined) {
-        //     document.querySelector("select.date-select").remove()
-        // }
-        dateSelector.innerHTML = null
-
-        tcFiles.forEach((tcFile, index) => {
-            dir = tcFile.clipType+tcFile.separator+tcFile.triggerDate
-            if (tcFile.clipType == "RecentClips") {
-                dir = tcFile.clipType+tcFile.separator+tcFile.clipName.replace(/-back.mp4$/gm,'')
-            }
-            
-            if (!tmpDir.includes(dir)) {
-                tmpDir.push(dir)
-                var option = document.createElement("option")
-                option.innerText = dir
-                option.value = index // assume that the index is going to be the first clip for each new date.
-                dateSelector.appendChild(option)
-            }
-        })
-
-        carousel = tcFiles
-        carouselEventFiles = eventFiles
-        loadVideos(0)
-    })
-    dateSelector.addEventListener("change", function(e){
-        carouselIndex = parseInt(e.target.options[e.target.selectedIndex].value)
-        loadVideos(carouselIndex)
-    })
-
-    function loadVideos(index){
-        title.innerHTML = carousel[index].build()
-        backVideo.src = carousel[index].build()+"-back.mp4"
-        frontVideo.src = carousel[index].build()+"-front.mp4"
-        leftVideo.src = carousel[index].build()+"-left_repeater.mp4"
-        rightVideo.src = carousel[index].build()+"-right_repeater.mp4"
-        //load the map window -> display google maps
-
-        if (carouselEventFiles[carousel[index].buildEvent()+"event.json"] == undefined) {
-            document.querySelector("td#showMap").innerHTML = ""
-        } 
-
-        var reader = new FileReader();
-        reader.onload = function(e) {
-            var contents = e.target.result;
-            var data = JSON.parse(contents)
-            console.log(data)
-
-            var zoom = 2000
-            var iframe = document.createElement("iframe")
-            iframe.src = "https://www.google.com/maps/embed?pb=!1m10!1m8!1m3!1d"+zoom+"!2d"+data.est_lon+"!3d"+data.est_lat+"!!!!!!!!!!!"
-            document.querySelector("td#showMap").innerHTML = ""
-            document.querySelector("td#showMap").appendChild(iframe)
-        };
-        reader.readAsText(carouselEventFiles[carousel[index].buildEvent()+"event.json"]);
-    }
-
-    function playVideos(){
-        frontVideo.play()
-        backVideo.play()
-        leftVideo.play()
-        rightVideo.play()
-
-        frontVideo.playbackRate=playbackRate;
-        backVideo.playbackRate=playbackRate;
-        leftVideo.playbackRate=playbackRate;
-        rightVideo.playbackRate=playbackRate;
-    }
-	
-    function playRate(rate){
-        playbackRate = rate
-        playVideos()
-    }
-
-    function pauseVideos(){
-        frontVideo.pause()
-        backVideo.pause()
-        leftVideo.pause()
-        rightVideo.pause()
-    }
-
-	function playPause() {
-        if (playPauseFlag!=true){
-            playVideos()
-            playPauseFlag = true;
-        } else {
-            pauseVideos()
-            playPauseFlag = false;
-        }
- 	}
-	
-    let videos = document.querySelectorAll("video");
-
-    function skipTo(seconds){
-        videos.forEach(video => {
-            video.currentTime += seconds
-        })
-    }
-
-    //Add listeners for play, pause and click buttons for each video.
-    videos.forEach(video => {
-        video.addEventListener("play", function(e){
-            console.log(e)
-            playVideos()
-        })
-
-        video.addEventListener("pause", function(e){
-            console.log(e)
-            if(e.target.ended){
-                if(document.querySelector("input[name=autoplay]").checked){
-                    carouselIndex+=1
-                    loadVideos(carouselIndex)
-                }
-            } else {
-                pauseVideos()
-            }
-        })
-
-        video.addEventListener("click", function(e){
-            console.log(e)
-            var currentTime = e.target.currentTime
-            if(e.target != frontVideo) {
-                frontVideo.currentTime = currentTime
-            }
-            if(e.target != leftVideo) {
-                leftVideo.currentTime = currentTime
-            }
-            if(e.target != rightVideo) {
-                rightVideo.currentTime = currentTime
-            }
-            if(e.target != backVideo) {
-                backVideo.currentTime = currentTime
-            }
-        })
-
-        video.addEventListener("canplaythrough", function(e){
-            console.log("Can Play Through")
-            if(document.querySelector("input[name=autoplay]").checked){
-                playVideos()
-            }
-        })
-    })
-    
-    var carouselIndex = 0
-
-    next.addEventListener("click", function(){
-        carouselIndex+=1
-        loadVideos(carouselIndex)
-    })
-
-    previous.addEventListener("click", function(){
-        carouselIndex-=1
-        loadVideos(carouselIndex)
-    })
-
-    backVideo.addEventListener("ended", function(){
-        console.log("Ended")
-        if(document.querySelector("input[name=autoplay]").checked){
-            carouselIndex+=1
-            loadVideos(carouselIndex)
-        }
-    })
-	
-</script>
+   <head>
+      <style>
+         div {
+         border:1px solid;
+         align-content: center;
+         }
+         div.title {
+         font-size: 25px;
+         text-align: center;
+         }
+         div.title>span {
+         color: red;
+         }
+         div>div.global-controls{
+         display: inline-block;
+         }
+         .play_speed {
+         display: inline-block;
+         padding: 5px;
+         text-align: center;
+         }
+         .controls {
+         display: inline-block;
+         padding: 5px;
+         text-align: center;
+         }
+         .showMap > iframe {
+         width: 600px;
+         height: 450px;
+         }
+         video {
+         width: 600px;
+         height: 450px;
+         }
+         table tr td {
+         border:1px solid;
+         text-align: center;
+         }
+         textarea {
+         width: 100%;
+         }
+         div.readme {
+         padding: 5px;
+         }
+         code {
+         background:lightgrey
+         }
+      </style>
+      <!-- Add Alpine.js from CDN -->
+      <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+   </head>
+   <body x-data="teslaCamViewer()">
+      <div>
+         <div>
+            <strong>Select TeslaCam Directory</strong>(Must be in same directory as Index.html):<br/> 
+            <input type="file" id="fileBrowser" accept="video/mp4" webkitdirectory multiple @change="handleFileSelection($event)" />
+         </div>
+         <div>
+            Browse Loaded Clips:
+            <select x-model="selectedClipIndex" @change="loadVideos(selectedClipIndex)">
+               <option value="-1">- - - - - -</option>
+               <template x-for="(option, index) in clipOptions" :key="index">
+                  <option :value="option.index" x-text="option.label"></option>
+               </template>
+            </select>
+         </div>
+      </div>
+      <div class="global-controls">
+         <div class="play_speed">
+            <span>Play Speed</span><br/>
+            <button @click="setPlaybackRate(0.5)">0.5x</button>
+            <button @click="setPlaybackRate(1)">1x</button>
+            <button @click="setPlaybackRate(2)">2x</button>
+            <button @click="setPlaybackRate(3)">3x</button>
+            <button @click="setPlaybackRate(8)">8x</button>
+         </div>
+         <div class="controls">
+            <span>General Controls</span><br/>
+            <button @click="prevClip()">&lt;&lt;PREV&lt;&lt;</button>
+            <button @click="skipTo(-5)">-5</button>
+            <button @click="skipTo(-3)">-3</button>
+            <button @click="playPause()">PLAY/PAUSE</button>
+            <button @click="skipTo(3)">3</button>
+            <button @click="skipTo(5)">5</button>
+            <button @click="nextClip()">&gt;&gt;NEXT&gt;&gt;</button>
+            <input x-model="autoplay" type="checkbox" name="autoplay" />Autoplay
+         </div>
+      </div>
+      <div>
+         <div class="title">
+            <span x-text="currentClipPath || 'No Videos Loaded'"></span>
+         </div>
+         <table>
+            <tr>
+               <td><video class="left_repeater" x-ref="leftVideo" :src="leftVideoSrc" controls controlsList="play pause"
+                  @play="syncPlay($event)" @pause="handlePause($event)" @click="syncTime($event)"
+                  @seeked="handleSeeked($event)"></video>
+               </td>
+               <td><video class="front" x-ref="frontVideo" :src="frontVideoSrc" controls controlsList="play pause"
+                  @play="syncPlay($event)" @pause="handlePause($event)" @click="syncTime($event)"
+                  @seeked="handleSeeked($event)"></video>
+               </td>
+               <td><video class="right_repeater" x-ref="rightVideo" :src="rightVideoSrc" controls controlsList="play pause"
+                  @play="syncPlay($event)" @pause="handlePause($event)" @click="syncTime($event)"
+                  @seeked="handleSeeked($event)"></video>
+               </td>
+            </tr>
+            <tr>
+               <td colspan="1" class="showMap" id="showMap" x-html="mapHtml"></td>
+               <td colspan="1"><video class="back" x-ref="backVideo" :src="backVideoSrc" controls controlsList="play pause"
+                  @play="syncPlay($event)" @pause="handlePause($event)" @click="syncTime($event)" @ended="handleVideoEnd"
+                  @seeked="handleSeeked($event)"></video>
+               </td>
+               <td colspan="1"></td>
+            </tr>
+         </table>
+      </div>
+      <div class="readme">
+         <h2>README</h2>
+         <hr/>
+         <strong>Directory Placement</strong><br/>
+         This <code>index.html</code> file <strong>must</strong> be at the same level as the <code>TeslaCam</code> folder which can be placed directly on the root of the USB drive.<br/>
+         <strong>Example:</strong><br/>
+         <code>
+         Root Folder<br/>
+         |- index.html<br/>
+         |- TeslaCam(USB Drive Top Level Folder)<br/>
+         &nbsp;&nbsp;&nbsp;|- Saved Clips<br/>
+         &nbsp;&nbsp;&nbsp;|- Sentry Videos<br/>
+         &nbsp;&nbsp;&nbsp;|- ...<br/>
+         </code><br/>
+      </div>
+   </body>
+   <script>
+      class TeslaCamFile {
+          separator = "/" //default separator(necessary? not sure)
+          clipType = "SentryClip" //Recorded/SentryClip...
+          triggerDate = "" // folder name doubles as the date the video clip was triggered
+          clipDate = "" // transformed clip name
+          clipName = "" // the clip name
+          file = "" // webkit file incase we need other data
+      
+          constructor(file){
+              this.clipName = file.name
+              this.clipDate = Date.parse(this.parseToDate(file.name))
+              this.getDirectories(file)
+      
+              //just in case we need it for the future
+              this.file = file
+          }
+      
+          getDirectories(file){
+              this.separator = file.webkitRelativePath.replace(file.name, "").substr(-1)
+              var directoryParts = file.webkitRelativePath.split(this.separator)
+              this.clipType = directoryParts[1]
+              this.triggerDate = directoryParts[2]
+          }
+      
+          //format to ISO(sorta) - no TZ so defaults to local
+          parseToDate(filename){
+              let nameArry = filename.split("_");
+              let dateArry = nameArry[0].split("-");
+              let hourArry = nameArry[1].split("-");
+              return dateArry[0]+"-"+dateArry[1]+"-"+dateArry[2]+"T"+hourArry[0]+":"+hourArry[1]+":"+hourArry[2]; 
+          }
+      
+          build(){
+              var filePath = "TeslaCam" + this.separator + this.clipType
+              if(this.clipType != "RecentClips"){
+                  filePath += this.separator + this.triggerDate
+              }
+      
+              return filePath + this.separator + this.clipName.replace(/-back.mp4$/gm,'')
+          }
+      
+          buildEvent(){
+              var filePath = "TeslaCam" + this.separator + this.clipType
+              if(this.clipType != "RecentClips"){
+                  filePath += this.separator + this.triggerDate
+              }
+      
+              return filePath + this.separator
+          }
+      }
+          function teslaCamViewer() {
+              return {
+                  // State
+                  carousel: [],
+                  carouselEventFiles: {},
+                  carouselIndex: 0,
+                  selectedClipIndex: -1,
+                  playbackRate: 1,
+                  isPlaying: false,
+                  autoplay: true,
+                  clipOptions: [],
+                  currentClipPath: '',
+                  frontVideoSrc: '',
+                  backVideoSrc: '',
+                  leftVideoSrc: '',
+                  rightVideoSrc: '',
+                  mapHtml: '',
+                  isSyncing: false,
+      
+              // Initialize the component
+              init() {
+                  // Set up canplaythrough event handlers
+                  this.$nextTick(() => {
+                      if (this.$refs.backVideo) {
+                          this.$refs.backVideo.addEventListener('canplaythrough', this.handleCanPlayThrough.bind(this));
+                      }
+                  });
+              },
+      
+              // Methods
+              handleFileSelection(event) {
+                  const files = event.target.files;
+                  const tcFiles = [];
+                  const eventFiles = {};
+      
+                  // Get "back" files to sort from webkitRelativePath
+                  for (let i = 0; i < files.length; i++) {
+                      const file = files[i];
+                      if (file.webkitRelativePath.endsWith("-back.mp4")) {
+                          const tcFile = new TeslaCamFile(file);
+                          tcFiles.push(tcFile);
+                      }
+                      if (file.webkitRelativePath.endsWith("event.json")) {
+                          eventFiles[file.webkitRelativePath] = file;
+                      }
+                  }
+                      
+                  // Sort files by date
+                  tcFiles.sort((a, b) => a.clipDate - b.clipDate);
+                  
+                  // Create dropdown options
+                  const tmpDir = [];
+                  const options = [];
+      
+                  tcFiles.forEach((tcFile, index) => {
+                      let dir = tcFile.clipType + tcFile.separator + tcFile.triggerDate;
+                      if (tcFile.clipType == "RecentClips") {
+                          dir = tcFile.clipType + tcFile.separator + tcFile.clipName.replace(/-back.mp4$/gm, '');
+                      }
+      
+                      if (!tmpDir.includes(dir)) {
+                              tmpDir.push(dir);
+                              options.push({
+                                  label: dir,
+                                  index: index
+                              });
+                          }
+                  });
+                  
+                  this.carousel = tcFiles;
+                  this.carouselEventFiles = eventFiles;
+                  this.clipOptions = options;
+                  
+                  if (options.length > 0) {
+                      this.selectedClipIndex = options[0].index;
+                      this.loadVideos(this.selectedClipIndex);
+                  }
+              },
+      
+              loadVideos(index) {
+                  if (!this.carousel[index]) return;
+      
+                  this.carouselIndex = parseInt(index);
+                  const clip = this.carousel[this.carouselIndex];
+      
+                  this.currentClipPath = clip.build();
+                  this.backVideoSrc = clip.build() + "-back.mp4";
+                  this.frontVideoSrc = clip.build() + "-front.mp4";
+                  this.leftVideoSrc = clip.build() + "-left_repeater.mp4";
+                  this.rightVideoSrc = clip.build() + "-right_repeater.mp4";
+      
+                  // Load the map window
+                  this.loadMap(clip);
+              },
+                  
+              loadMap(clip) {
+                  this.mapHtml = '';
+                  const eventPath = clip.buildEvent() + "event.json";
+              
+                  if (!this.carouselEventFiles[eventPath]) return;
+                  
+                  const reader = new FileReader();
+                  reader.onload = (e) => {
+                      const contents = e.target.result;
+                      try {
+                          const data = JSON.parse(contents);
+                          const zoom = 2000;
+                          this.mapHtml = `<iframe src="https://www.google.com/maps/embed?pb=!1m10!1m8!1m3!1d${zoom}!2d${data.est_lon}!3d${data.est_lat}!!!!!!!!!!!"></iframe>`;
+                      } catch (err) {
+                          console.error("Error parsing JSON:", err);
+                      }
+                  };
+                  reader.readAsText(this.carouselEventFiles[eventPath]);
+              },
+      
+              playVideos() {
+                  this.isPlaying = true;
+                  const videos = [
+                      this.$refs.frontVideo,
+                      this.$refs.backVideo,
+                      this.$refs.leftVideo,
+                      this.$refs.rightVideo
+                  ];
+              
+                  videos.forEach(video => {
+                      if (video) {
+                          video.play();
+                          video.playbackRate = this.playbackRate;
+                      }
+                  });
+              },
+                  
+              pauseVideos() {
+                  this.isPlaying = false;
+                  const videos = [
+                      this.$refs.frontVideo,
+                      this.$refs.backVideo,
+                      this.$refs.leftVideo,
+                      this.$refs.rightVideo
+                  ];
+              
+                  videos.forEach(video => {
+                      if (video) video.pause();
+                  });
+              },
+      
+              setPlaybackRate(rate) {
+                  this.playbackRate = rate;
+                  this.playVideos();
+              },
+      
+              playPause() {
+                  this.isPlaying ? this.pauseVideos() : this.playVideos();
+              },
+      
+              skipTo(seconds) {
+                  const videos = [
+                      this.$refs.frontVideo,
+                      this.$refs.backVideo,
+                      this.$refs.leftVideo,
+                      this.$refs.rightVideo
+                  ];
+                      
+                  videos.forEach(video => {
+                      if (video) video.currentTime += seconds;
+                  });
+              },
+      
+              syncPlay(event) {
+                  this.playVideos();
+              },
+                      
+              handlePause(event) {
+                  if (event.target.ended) {
+                      if (this.autoplay) {
+                          this.nextClip();
+                      }
+                  } else {
+                      this.pauseVideos();
+                  }
+              },
+      
+              syncTime(event) {
+                  const currentTime = event.target.currentTime;
+      
+                  const videos = [
+                      this.$refs.frontVideo,
+                      this.$refs.backVideo,
+                      this.$refs.leftVideo,
+                      this.$refs.rightVideo
+                  ];
+              
+                  videos.forEach(video => {
+                      if (video && video !== event.target) {
+                          video.currentTime = currentTime;
+                      }
+                  });
+              },
+      
+              // This is the new method to handle seeked events (when user finishes scrubbing)
+              handleSeeked(event) {
+                  if (this.isSyncing) return;
+      
+                  this.isSyncing = true;
+      
+                  const currentTime = event.target.currentTime;
+      
+                  const videos = [
+                      this.$refs.frontVideo,
+                      this.$refs.backVideo,
+                      this.$refs.leftVideo,
+                      this.$refs.rightVideo
+                  ];
+                  
+                  videos.forEach(video => {
+                      if (video && video !== event.target) {
+                          video.currentTime = currentTime;
+                      }
+                  });
+                  
+                  setTimeout(() => {
+                      this.isSyncing = false;
+                  }, 100);
+              },
+      
+              handleCanPlayThrough() {
+                  if (this.autoplay) {
+                      this.playVideos();
+                  }
+              },
+      
+              nextClip() {
+                  if (this.carouselIndex < this.carousel.length - 1) {
+                      this.carouselIndex++;
+                      this.loadVideos(this.carouselIndex);
+                  }
+              },
+      
+              prevClip() {
+                  if (this.carouselIndex > 0) {
+                      this.carouselIndex--;
+                      this.loadVideos(this.carouselIndex);
+                  }
+              },
+              
+              handleVideoEnd() {
+                  if (this.autoplay) {
+                      this.nextClip();
+                  }
+              }
+          };
+      }
+   </script>
 </html>
